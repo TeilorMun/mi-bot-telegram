@@ -4,17 +4,17 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
-    plan: starter
-    disk:
-      name: teilor-data
-      mountPath: /var/data
-      sizeGB: 1
+    plan: free
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
-      - key: FERNET_KEY
-        sync: false
-      - key: ADMIN_IDS
+      - key: TELEGRAM_ADMINS
         value: "740151755"
-      - key: DB_PATH
-        value: /var/data/teilor.db
+      - key: SECRET_KEY
+        sync: false
+      - key: ENCRYPT_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.12.7"
