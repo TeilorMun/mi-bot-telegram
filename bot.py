@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from common import *
 
-TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
+TOKEN = os.environ.get('9056359122:AAGDxJSqVie-fIOPQkpG7h5N4Qaa1cUS3os', '').strip()
 ADMINS = {x.strip() for x in os.environ.get('ADMIN_IDS', '740151755').split(',') if x.strip()}
 
 # ---------------- Telegram helpers ----------------
