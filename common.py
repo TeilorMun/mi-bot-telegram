@@ -1,20 +1,35 @@
-import sqlite3, time, random, string, os, hashlib
+import os, secrets, string, hashlib, hmac
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from cryptography.fernet import Fernet
+import psycopg2
+import psycopg2.extras
+from cryptography.fernet import Fernet, InvalidToken
 
-SECRET_KEY = Fernet.generate_key()
-cipher = Fernet(SECRET_KEY)
+# --- DATOS REALES ---
+DATABASE_URL = 'postgresql://postgres.hotekovqnkpwwvevulwrt:I5724180t.%40@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require'
+
+# Clave Fernet fija: NO cambiarla nunca o las credenciales guardadas dejan de abrirse.
+ENCRYPT_KEY = 'FFbj9Huz7DbWp16juLVrzzoeNB1Fx-pWKzMWBLURxHc='
+
+# Clave para firmar los hashes de sesión.
+SECRET_KEY = 'TlszO3JNgUMZbOgF-kfwQccpVkLEjBbmGkMJ-_qIt18='
+
+_cipher = Fernet(ENCRYPT_KEY.encode())
+_HMAC_KEY = SECRET_KEY.encode()
 
 def encrypt(text):
     if not text: return ""
-    return cipher.encrypt(text.encode()).decode()
+    return _cipher.encrypt(text.encode()).decode()
 
 def decrypt(token):
     if not token: return ""
-    return cipher.decrypt(token.encode()).decode()
+    try:
+        return _cipher.decrypt(token.encode()).decode()
+    except (InvalidToken, ValueError):
+        return ""
 
 def token_hash(token):
-    return hashlib.sha256(token.encode()).hexdigest()
+    return hmac.new(_HMAC_KEY, token.encode(), hashlib.sha256).hexdigest()
 
 def now():
     return datetime.now(timezone.utc)
@@ -25,81 +40,111 @@ def iso(dt=None):
 
 def parse_dt(s):
     if not s: return None
-    return datetime.fromisoformat(s)
+    if isinstance(s, datetime):
+        return s if s.tzinfo else s.replace(tzinfo=timezone.utc)
+    try:
+        dt = datetime.fromisoformat(str(s))
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
+@contextmanager
 def db():
-    conn = sqlite3.connect('teilor.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+    conn = psycopg2.connect(DATABASE_URL, connect_timeout=10)
+    conn.autocommit = False
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            yield cur
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 def init_db():
     with db() as c:
-        # Tabla de usuarios
         c.execute('''CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             status TEXT DEFAULT 'active',
-            expires_at TEXT,
+            expires_at TIMESTAMPTZ,
             max_devices INTEGER DEFAULT 1,
             telegram_user TEXT,
             telegram_id TEXT
         )''')
-        # Tabla de dispositivos
         c.execute('''CREATE TABLE IF NOT EXISTS devices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
             install_id TEXT,
             device_name TEXT,
-            last_seen TEXT,
-            revoked INTEGER DEFAULT 0
+            last_seen TIMESTAMPTZ,
+            revoked BOOLEAN DEFAULT FALSE
         )''')
-        # Tabla de servidores (soporta múltiples M3U)
         c.execute('''CREATE TABLE IF NOT EXISTS servers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT,
             kind TEXT,
             url TEXT,
             username_enc TEXT,
             password_enc TEXT,
-            active INTEGER DEFAULT 1,
-            created_at TEXT
+            active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMPTZ
         )''')
-        # Tabla de sesiones
         c.execute('''CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            device_id INTEGER,
-            token_hash TEXT,
-            created_at TEXT,
-            revoked INTEGER DEFAULT 0
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            device_id INTEGER REFERENCES devices(id) ON DELETE CASCADE,
+            token_hash TEXT UNIQUE,
+            created_at TIMESTAMPTZ,
+            last_seen_at TIMESTAMPTZ,
+            revoked BOOLEAN DEFAULT FALSE
         )''')
-        # Tabla de códigos de activación (generados por el admin)
         c.execute('''CREATE TABLE IF NOT EXISTS activation_codes (
             code TEXT PRIMARY KEY,
-            months INTEGER,
-            devices INTEGER,
-            expires_at TEXT,
-            used_at TEXT,
+            months INTEGER NOT NULL,
+            devices INTEGER NOT NULL,
+            expires_at TIMESTAMPTZ,
+            used_at TIMESTAMPTZ,
             used_by INTEGER,
             allowed_telegram_id TEXT
         )''')
-        # Tabla de códigos de vinculación (para añadir más dispositivos)
         c.execute('''CREATE TABLE IF NOT EXISTS pair_codes (
             code TEXT PRIMARY KEY,
-            user_id INTEGER,
-            expires_at TEXT,
-            used_at TEXT
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            expires_at TIMESTAMPTZ,
+            used_at TIMESTAMPTZ
         )''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_devices_install ON devices(install_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_devices_user ON devices(user_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_codes_used ON activation_codes(used_at)')
+
+_ALPHABET = string.ascii_uppercase + string.digits
+
+def _gen_code(n):
+    return ''.join(secrets.choice(_ALPHABET) for _ in range(n))
 
 def create_code(months, devices, allowed_id=""):
-    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    if months not in (1, 3, 6, 12): raise ValueError('Meses no válidos')
+    if devices not in (1, 2, 3, 4): raise ValueError('Dispositivos no válidos')
     with db() as c:
-        c.execute('INSERT INTO activation_codes(code, months, devices, expires_at, allowed_telegram_id) VALUES(?,?,?,?,?)',
-                  (code, months, devices, iso(now() + timedelta(hours=48)), allowed_id))
-    return code
+        for _ in range(10):
+            code = _gen_code(12)
+            c.execute('SELECT 1 FROM activation_codes WHERE code=%s', (code,))
+            if c.fetchone(): continue
+            c.execute('INSERT INTO activation_codes(code, months, devices, expires_at, allowed_telegram_id) VALUES(%s,%s,%s,%s,%s)',
+                      (code, months, devices, now() + timedelta(hours=48), allowed_id))
+            return code
+    raise RuntimeError('No se pudo generar un código único')
 
 def create_pair_code(user_id):
-    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     with db() as c:
-        c.execute('INSERT INTO pair_codes(code, user_id, expires_at) VALUES(?,?,?)',
-                  (code, user_id, iso(now() + timedelta(hours=24))))
-    return code
+        for _ in range(10):
+            code = _gen_code(8)
+            c.execute('SELECT 1 FROM pair_codes WHERE code=%s', (code,))
+            if c.fetchone(): continue
+            c.execute('INSERT INTO pair_codes(code, user_id, expires_at) VALUES(%s,%s,%s)',
+                      (code, user_id, now() + timedelta(hours=24)))
+            return code
+    raise RuntimeError('No se pudo generar un código único')
