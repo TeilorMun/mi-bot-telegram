@@ -1,823 +1,206 @@
-
-import os
-import re
-import asyncio
-import threading
-import json
-
+import os, json, threading, secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
-
+from datetime import timedelta
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-
 from common import *
 
+TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
+ADMINS = {x.strip() for x in os.environ.get('ADMIN_IDS', '740151755').split(',') if x.strip()}
 
-# =========================================================
-# CONFIGURACIÓN
-# =========================================================
-
-# Pega aquí tu token ACTUAL en tu copia local.
-# No publiques el token ni lo compartas.
-TOKEN = os.environ.get("9056359122:AAGDxJSqVie-fIOPQkpG7h5N4Qaa1cUS3os", "")
-
-ADMINS = {"740151755"}
-
-
-def is_admin(update):
-    return bool(
-        update.effective_user
-        and str(update.effective_user.id) in ADMINS
-    )
-
-
-async def deny(update):
-    await update.effective_message.reply_text(
-        "⛔ Esta función está reservada al propietario de TEILOR PLAYER."
-    )
-    return False
-
-
+# ---------------- Telegram helpers ----------------
+def is_admin(update): return bool(update.effective_user and str(update.effective_user.id) in ADMINS)
 async def admin_only(update):
-    if not is_admin(update):
-        await deny(update)
-        return False
+    if not is_admin(update): await update.effective_message.reply_text('⛔ Solo el administrador puede usar este comando.'); return False
     return True
-
-
-# =========================================================
-# COMANDOS BÁSICOS
-# =========================================================
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if is_admin(update):
-        await update.message.reply_text(
-            "👑 TEILOR PLAYER · Panel del propietario\n\n"
-            "Usa /panel para ver todos los comandos.\n"
-            "Tu ID de Telegram: "
-            + str(update.effective_user.id)
-        )
-    else:
-        await update.message.reply_text(
-            "👋 Bienvenido a TEILOR PLAYER. "
-            "La activación y el reproductor se realizan desde la aplicación. "
-            "Si necesitas un código, contacta con el administrador."
-        )
-
-
-async def id_cmd(update, context):
-    await update.message.reply_text(
-        "Tu ID de Telegram es: "
-        + str(update.effective_user.id)
-    )
-
-
+async def start(update, context):
+    msg = ('👑 TEILOR PLAYER · Panel del propietario\nUsa /panel. Tu ID: '+str(update.effective_user.id)) if is_admin(update) else '👋 Bienvenido a TEILOR PLAYER. Solicita tu código de activación al administrador.'
+    await update.effective_message.reply_text(msg)
+async def id_cmd(update, context): await update.effective_message.reply_text('Tu ID de Telegram: '+str(update.effective_user.id))
 async def panel(update, context):
-    if not await admin_only(update):
-        return
-
-    await update.message.reply_text(
-        """👑 TEILOR PLAYER — PANEL DE CONTROL
-
-USUARIOS
-/crear 6 1        Crear código de 6 meses y 1 dispositivo
-/crear 12 2        Crear código de 12 meses y 2 dispositivos
-/usuarios          Ver usuarios
-/bloquear ID       Revocar acceso
-/activar ID        Reactivar usuario
-/borrar ID         Eliminar usuario
-/renovar ID MESES  Añadir meses
-/limite ID 1|2     Cambiar límite de dispositivos
-/dispositivos ID   Ver dispositivos
-/vincular ID       Código para añadir otro dispositivo
-/revocadispositivo ID DEVICE_ID Revocar dispositivo
-
-SERVIDORES
-/addxtream Nombre | URL | Usuario | Contraseña
-/addm3u Nombre | URL_M3U_XTREAM
-/servidores        Ver servidores
-/offserver ID      Desactivar servidor
-/onserver ID       Activar servidor
-/delserver ID      Eliminar servidor
-
-/ayuda             Mostrar esta ayuda
-
-Los códigos duran 48 horas y solo se pueden canjear una vez."""
-    )
-
-
-# =========================================================
-# CREAR CÓDIGOS
-# =========================================================
-
-async def crear(update, context):
-    if not await admin_only(update):
-        return
-
+    if await admin_only(update): await update.effective_message.reply_text('''TEILOR PLAYER — ADMIN\n/crear 6 1 | /crear 12 2\n/usuarios\n/bloquear ID | /activar ID | /borrar ID\n/renovar ID MESES | /limite ID 1|2\n/dispositivos ID | /vincular ID | /revocadispositivo ID DEVICE_ID\n/addxtream Nombre | URL | Usuario | Contraseña\n/addm3u Nombre | URL_M3U_XTREAM\n/servidores | /offserver ID | /onserver ID | /delserver ID''')
+async def crear(u,c):
+    if not await admin_only(u): return
     try:
-        months = int(context.args[0])
-        devices = int(context.args[1])
-
-        if months not in (6, 12) or devices not in (1, 2):
-            raise ValueError()
-
-        code = create_code(months, devices)
-
-        await update.message.reply_text(
-            f"✅ CÓDIGO CREADO\n\n"
-            f"Código: {code}\n"
-            f"Duración: {months} meses desde la activación\n"
-            f"Dispositivos: {devices}\n"
-            f"Caduca sin usar en: 48 horas\n\n"
-            f"Envíalo al usuario. No se puede reutilizar."
-        )
-
-    except Exception:
-        await update.message.reply_text(
-            "Uso: /crear 6 1  o  /crear 12 2"
-        )
-
-
-# =========================================================
-# USUARIOS
-# =========================================================
-
-async def usuarios(update, context):
-    if not await admin_only(update):
-        return
-
-    with db() as c:
-        rows = c.execute(
-            "SELECT id,status,expires_at,max_devices "
-            "FROM users ORDER BY id DESC LIMIT 50"
-        ).fetchall()
-
-    if not rows:
-        await update.message.reply_text(
-            "Todavía no hay usuarios activados."
-        )
-        return
-
-    lines = ["👥 ÚLTIMOS USUARIOS"]
-
-    for r in rows:
-        lines.append(
-            f"ID {r['id']} · {r['status']} · "
-            f"vence {r['expires_at'][:10]} · "
-            f"{r['max_devices']} dispositivo(s)"
-        )
-
-    await update.message.reply_text("\n".join(lines))
-
-
-async def user_action(update, context, action):
-    if not await admin_only(update):
-        return
-
-    try:
-        uid = int(context.args[0])
-    except Exception:
-        await update.message.reply_text(
-            "Indica el ID interno. Consulta /usuarios."
-        )
-        return
-
-    with db() as c:
-        row = c.execute(
-            "SELECT * FROM users WHERE id=?",
-            (uid,)
-        ).fetchone()
-
-        if not row:
-            await update.message.reply_text(
-                "No existe ese usuario."
-            )
-            return
-
-        if action == "bloquear":
-            c.execute(
-                'UPDATE users SET status="blocked" WHERE id=?',
-                (uid,)
-            )
-            c.execute(
-                "UPDATE sessions SET revoked=1 WHERE user_id=?",
-                (uid,)
-            )
-            msg = "Usuario bloqueado y sesiones revocadas."
-
-        elif action == "activar":
-            c.execute(
-                'UPDATE users SET status="active" WHERE id=?',
-                (uid,)
-            )
-            msg = (
-                "Usuario activado. Comprueba también "
-                "su fecha de vencimiento."
-            )
-
-        elif action == "borrar":
-            c.execute(
-                "DELETE FROM users WHERE id=?",
-                (uid,)
-            )
-            msg = "Usuario eliminado."
-
-    await update.message.reply_text("✅ " + msg)
-
-
-async def bloquear(u, c):
-    await user_action(u, c, "bloquear")
-
-
-async def activar(u, c):
-    await user_action(u, c, "activar")
-
-
-async def borrar(u, c):
-    await user_action(u, c, "borrar")
-
-
-# =========================================================
-# RENOVACIONES Y DISPOSITIVOS
-# =========================================================
-
-async def renovar(update, context):
-    if not await admin_only(update):
-        return
-
-    try:
-        uid = int(context.args[0])
-        months = int(context.args[1])
-
-        assert months in (1, 3, 6, 12)
-
-    except Exception:
-        await update.message.reply_text(
-            "Uso: /renovar ID MESES (1, 3, 6 o 12)"
-        )
-        return
-
-    with db() as c:
-        row = c.execute(
-            "SELECT * FROM users WHERE id=?",
-            (uid,)
-        ).fetchone()
-
-        if not row:
-            await update.message.reply_text(
-                "Usuario no encontrado."
-            )
-            return
-
-        base = max(now(), parse_dt(row["expires_at"]))
-        expiry = base + timedelta(days=30 * months)
-
-        c.execute(
-            'UPDATE users SET expires_at=?,status="active" WHERE id=?',
-            (iso(expiry), uid)
-        )
-
-    await update.message.reply_text(
-        f"✅ Usuario {uid} renovado hasta {iso(expiry)[:10]}."
-    )
-
-
-async def limite(update, context):
-    if not await admin_only(update):
-        return
-
-    try:
-        uid = int(context.args[0])
-        n = int(context.args[1])
-        assert n in (1, 2)
-
-    except Exception:
-        await update.message.reply_text(
-            "Uso: /limite ID 1  o  /limite ID 2"
-        )
-        return
-
-    with db() as c:
-        c.execute(
-            "UPDATE users SET max_devices=? WHERE id=?",
-            (n, uid)
-        )
-
-        c.execute(
-            """UPDATE devices SET revoked=1
-            WHERE user_id=? AND id NOT IN
-            (SELECT id FROM devices
-             WHERE user_id=? AND revoked=0
-             ORDER BY last_seen DESC LIMIT ?)""",
-            (uid, uid, n)
-        )
-
-    await update.message.reply_text(
-        f"✅ Límite del usuario {uid}: {n} dispositivo(s)."
-    )
-
-
-async def dispositivos(update, context):
-    if not await admin_only(update):
-        return
-
-    try:
-        uid = int(context.args[0])
-
-    except Exception:
-        await update.message.reply_text(
-            "Uso: /dispositivos ID"
-        )
-        return
-
-    with db() as c:
-        rows = c.execute(
-            """SELECT id,install_id,device_name,last_seen,revoked
-            FROM devices WHERE user_id=?""",
-            (uid,)
-        ).fetchall()
-
-    if not rows:
-        await update.message.reply_text(
-            "No hay dispositivos registrados."
-        )
-        return
-
-    lines = []
-
-    for r in rows:
-        lines.append(
-            f"Dispositivo interno {r['id']} · "
-            f"{r['device_name']} · visto {r['last_seen'][:16]} · "
-            f"{'revocado' if r['revoked'] else 'activo'}\n"
-            f"Instalación: {r['install_id']}"
-        )
-
-    await update.message.reply_text("\n".join(lines))
-
-
-async def vincular(update, context):
-    if not await admin_only(update):
-        return
-
-    try:
-        uid = int(context.args[0])
-        code = create_pair_code(uid)
-
-    except Exception as e:
-        await update.message.reply_text(
-            "No se pudo crear el código: " + str(e)
-        )
-        return
-
-    await update.message.reply_text(
-        f"🔐 CÓDIGO PARA AÑADIR DISPOSITIVO\n\n"
-        f"Usuario: {uid}\n"
-        f"Código: {code}\n"
-        f"Válido durante 24 horas y de un solo uso.\n\n"
-        f"El usuario debe introducirlo en la APK del nuevo dispositivo."
-    )
-
-
-async def revocadispositivo(update, context):
-    if not await admin_only(update):
-        return
-
-    try:
-        uid = int(context.args[0])
-        did = int(context.args[1])
-
-    except Exception:
-        await update.message.reply_text(
-            "Uso: /revocadispositivo ID_USUARIO ID_DISPOSITIVO"
-        )
-        return
-
-    with db() as c:
-        cur = c.execute(
-            "UPDATE devices SET revoked=1 WHERE id=? AND user_id=?",
-            (did, uid)
-        )
-
-        if cur.rowcount:
-            c.execute(
-                "UPDATE sessions SET revoked=1 WHERE device_id=?",
-                (did,)
-            )
-
-    await update.message.reply_text(
-        "✅ Dispositivo revocado."
-        if cur.rowcount
-        else "No se encontró ese dispositivo para ese usuario."
-    )
-
-
-# =========================================================
-# AÑADIR SERVIDORES
-# =========================================================
-
-async def addxtream(update, context):
-    if not await admin_only(update):
-        return
-
-    raw = " ".join(context.args)
-    parts = [x.strip() for x in raw.split("|")]
-
-    if len(parts) != 4:
-        await update.message.reply_text(
-            "Uso: /addxtream Nombre | URL | Usuario | Contraseña"
-        )
-        return
-
-    name, url, user, pw = parts
-
-    if not url.startswith(("http://", "https://")):
-        await update.message.reply_text(
-            "La URL debe comenzar por http:// o https://"
-        )
-        return
-
-    with db() as c:
-        c.execute(
-            """INSERT INTO servers
-            (name,kind,url,username_enc,password_enc,active,created_at)
-            VALUES(?,?,?,?,?,?,?)""",
-            (
-                name,
-                "xtream",
-                url.rstrip("/"),
-                encrypt(user),
-                encrypt(pw),
-                1,
-                iso()
-            )
-        )
-
-    await update.message.reply_text(
-        f"✅ Servidor «{name}» añadido y disponible para todos los usuarios activos."
-    )
-
-
-async def addm3u(update, context):
-    if not await admin_only(update):
-        return
-
-    raw = " ".join(context.args)
-    parts = [x.strip() for x in raw.split("|", 1)]
-
-    if len(parts) != 2:
-        await update.message.reply_text(
-            "Uso: /addm3u Nombre | URL_M3U_XTREAM"
-        )
-        return
-
-    name, link = parts
-
-    try:
-        u = urlparse(link)
-        q = parse_qs(u.query)
-
-        username = q.get("username", [""])[0]
-        password = q.get("password", [""])[0]
-
-        if not (username and password):
-            path_parts = [
-                x for x in u.path.strip("/").split("/") if x
-            ]
-
-            if len(path_parts) >= 2:
-                username, password = path_parts[-2], path_parts[-1]
-
-        if not (
-            u.scheme in ("http", "https")
-            and u.netloc
-            and username
-            and password
-        ):
-            raise ValueError()
-
-        base = f"{u.scheme}://{u.netloc}"
-
-    except Exception:
-        await update.message.reply_text(
-            "Este reproductor necesita una URL M3U de tipo Xtream "
-            "que contenga username y password. "
-            "Las listas M3U genéricas todavía no están soportadas "
-            "por la lógica original del HTML."
-        )
-        return
-
-    with db() as c:
-        c.execute(
-            """INSERT INTO servers
-            (name,kind,url,username_enc,password_enc,active,created_at)
-            VALUES(?,?,?,?,?,?,?)""",
-            (
-                name,
-                "xtream_m3u",
-                base,
-                encrypt(username),
-                encrypt(password),
-                1,
-                iso()
-            )
-        )
-
-    await update.message.reply_text(
-        f"✅ Fuente «{name}» añadida desde el enlace M3U Xtream."
-    )
-
-
-# =========================================================
-# LISTA DE SERVIDORES
-# =========================================================
-
-async def servidores(update, context):
-    if not await admin_only(update):
-        return
-
-    with db() as c:
-        rows = c.execute(
-            "SELECT id,name,kind,url,active FROM servers ORDER BY id"
-        ).fetchall()
-
-    if not rows:
-        await update.message.reply_text(
-            "No hay servidores. Usa /addxtream o /addm3u."
-        )
-        return
-
-    lines = []
-
-    for r in rows:
-        lines.append(
-            f"ID {r['id']} · {r['name']} · {r['kind']} · "
-            f"{'ACTIVO' if r['active'] else 'INACTIVO'}\n{r['url']}"
-        )
-
-    await update.message.reply_text("\n".join(lines))
-
-
-async def server_action(update, context, action):
-    if not await admin_only(update):
-        return
-
-    try:
-        sid = int(context.args[0])
-
-    except Exception:
-        await update.message.reply_text(
-            "Indica el ID del servidor. Consulta /servidores."
-        )
-        return
-
-    with db() as c:
-        if action == "delete":
-            c.execute(
-                "DELETE FROM servers WHERE id=?",
-                (sid,)
-            )
+        m,d=int(c.args[0]),int(c.args[1]); assert m in (1,3,6,12) and d in (1,2,3,4)
+        code=create_code(m,d); await u.effective_message.reply_text(f'Código: {code}\nDuración: {m} meses desde activación\nDispositivos: {d}\nVálido 48 horas, un solo uso.')
+    except Exception: await u.effective_message.reply_text('Uso: /crear 6 1 (meses 1,3,6,12; dispositivos 1-4)')
+async def usuarios(u,c):
+    if not await admin_only(u): return
+    with db() as x: rows=x.execute('SELECT id,status,expires_at,max_devices FROM users ORDER BY id DESC LIMIT 50').fetchall()
+    await u.effective_message.reply_text('\n'.join([f"ID {r['id']} · {r['status']} · vence {(r['expires_at'] or 'sin fecha')[:10]} · {r['max_devices']} disp." for r in rows]) or 'No hay usuarios.')
+async def user_action(u,c,action):
+    if not await admin_only(u): return
+    try: uid=int(c.args[0])
+    except: await u.effective_message.reply_text('Indica el ID de usuario.'); return
+    with db() as x:
+        row=x.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
+        if not row: await u.effective_message.reply_text('Usuario no encontrado.'); return
+        if action=='block': x.execute("UPDATE users SET status='blocked' WHERE id=?",(uid,)); x.execute('UPDATE sessions SET revoked=1 WHERE user_id=?',(uid,)); msg='Usuario bloqueado y sesiones revocadas.'
+        elif action=='enable': x.execute("UPDATE users SET status='active' WHERE id=?",(uid,)); msg='Usuario activado. Comprueba su vencimiento.'
+        else: x.execute('DELETE FROM users WHERE id=?',(uid,)); msg='Usuario eliminado.'
+    await u.effective_message.reply_text(msg)
+async def bloquear(u,c): await user_action(u,c,'block')
+async def activar(u,c): await user_action(u,c,'enable')
+async def borrar(u,c): await user_action(u,c,'delete')
+async def renovar(u,c):
+    if not await admin_only(u): return
+    try: uid,m=int(c.args[0]),int(c.args[1]); assert m in (1,3,6,12)
+    except: await u.effective_message.reply_text('Uso: /renovar ID MESES (1,3,6,12)'); return
+    with db() as x:
+        r=x.execute('SELECT expires_at FROM users WHERE id=?',(uid,)).fetchone()
+        if not r: await u.effective_message.reply_text('Usuario no encontrado.'); return
+        base=max(now(),parse_dt(r['expires_at']) or now()); exp=base+timedelta(days=30*m)
+        x.execute("UPDATE users SET expires_at=?,status='active' WHERE id=?",(iso(exp),uid))
+    await u.effective_message.reply_text(f'Renovado hasta {iso(exp)[:10]}.')
+async def limite(u,c):
+    if not await admin_only(u): return
+    try: uid,n=int(c.args[0]),int(c.args[1]); assert n in (1,2,3,4)
+    except: await u.effective_message.reply_text('Uso: /limite ID 1|2|3|4'); return
+    with db() as x: x.execute('UPDATE users SET max_devices=? WHERE id=?',(n,uid))
+    await u.effective_message.reply_text('Límite actualizado.')
+async def dispositivos(u,c):
+    if not await admin_only(u): return
+    try: uid=int(c.args[0])
+    except: await u.effective_message.reply_text('Uso: /dispositivos ID'); return
+    with db() as x: rows=x.execute('SELECT id,device_name,last_seen,revoked FROM devices WHERE user_id=?',(uid,)).fetchall()
+    await u.effective_message.reply_text('\n'.join([f"Dispositivo {r['id']} · {r['device_name']} · {r['last_seen']} · {'revocado' if r['revoked'] else 'activo'}" for r in rows]) or 'Sin dispositivos.')
+async def vincular(u,c):
+    if not await admin_only(u): return
+    try: uid=int(c.args[0]); code=create_pair_code(uid); await u.effective_message.reply_text(f'Código adicional: {code}\nVálido 24 horas y un solo uso. En el reproductor, introdúcelo en el campo de activación.')
+    except: await u.effective_message.reply_text('Uso: /vincular ID')
+async def revocadispositivo(u,c):
+    if not await admin_only(u): return
+    try: uid,did=int(c.args[0]),int(c.args[1])
+    except: await u.effective_message.reply_text('Uso: /revocadispositivo ID_USUARIO ID_DISPOSITIVO'); return
+    with db() as x:
+        cur=x.execute('UPDATE devices SET revoked=1 WHERE id=? AND user_id=?',(did,uid)); x.execute('UPDATE sessions SET revoked=1 WHERE device_id=?',(did,))
+    await u.effective_message.reply_text('Dispositivo revocado.' if cur.rowcount else 'No encontrado.')
+async def addxtream(u,c):
+    if not await admin_only(u): return
+    p=[z.strip() for z in ' '.join(c.args).split('|')]
+    if len(p)!=4: await u.effective_message.reply_text('Uso: /addxtream Nombre | URL | Usuario | Contraseña'); return
+    name,url,user,pw=p
+    if not url.startswith(('https://','http://')): await u.effective_message.reply_text('URL inválida.'); return
+    with db() as x: x.execute('INSERT INTO servers(name,kind,url,username_enc,password_enc,active,created_at) VALUES(?,?,?,?,?,?,?)',(name,'xtream',url.rstrip('/'),encrypt(user),encrypt(pw),1,iso()))
+    await u.effective_message.reply_text(f'Servidor {name} añadido.')
+async def addm3u(u,c):
+    if not await admin_only(u): return
+    p=' '.join(c.args).split('|',1)
+    if len(p)!=2: await u.effective_message.reply_text('Uso: /addm3u Nombre | URL_M3U_XTREAM'); return
+    name,link=p[0].strip(),p[1].strip(); z=urlparse(link); q=parse_qs(z.query); user=q.get('username',[''])[0]; pw=q.get('password',[''])[0]
+    if not user or not pw:
+        parts=[v for v in z.path.strip('/').split('/') if v]
+        if len(parts)>=2: user,pw=parts[-2:]
+    if z.scheme not in ('http','https') or not z.netloc or not user or not pw: await u.effective_message.reply_text('Se necesita enlace Xtream con usuario y contraseña.'); return
+    with db() as x: x.execute('INSERT INTO servers(name,kind,url,username_enc,password_enc,active,created_at) VALUES(?,?,?,?,?,?,?)',(name,'xtream_m3u',f'{z.scheme}://{z.netloc}',encrypt(user),encrypt(pw),1,iso()))
+    await u.effective_message.reply_text(f'Fuente {name} añadida.')
+async def servidores(u,c):
+    if not await admin_only(u): return
+    with db() as x: rows=x.execute('SELECT id,name,kind,url,active FROM servers ORDER BY id').fetchall()
+    await u.effective_message.reply_text('\n'.join([f"{r['id']} · {r['name']} · {r['kind']} · {'ACTIVO' if r['active'] else 'INACTIVO'}\n{r['url']}" for r in rows]) or 'No hay servidores.')
+async def server_action(u,c,action):
+    if not await admin_only(u): return
+    try: sid=int(c.args[0])
+    except: await u.effective_message.reply_text('Indica el ID de servidor.'); return
+    with db() as x:
+        cur=x.execute('DELETE FROM servers WHERE id=?',(sid,)) if action=='delete' else x.execute('UPDATE servers SET active=? WHERE id=?',(1 if action=='on' else 0,sid))
+    await u.effective_message.reply_text('Operación aplicada.' if cur.rowcount else 'Servidor no encontrado.')
+async def offserver(u,c): await server_action(u,c,'off')
+async def onserver(u,c): await server_action(u,c,'on')
+async def delserver(u,c): await server_action(u,c,'delete')
+async def ayuda(u,c): await panel(u,c)
+
+# ---------------- HTTP API used by the HTML player ----------------
+def get_auth_session(handler):
+    auth=handler.headers.get('Authorization','')
+    if not auth.startswith('Bearer '): return None
+    digest=token_hash(auth[7:].strip())
+    with db() as x:
+        return x.execute('''SELECT s.id session_id,s.user_id,s.device_id,u.status,u.expires_at,d.revoked device_revoked
+            FROM sessions s JOIN users u ON u.id=s.user_id JOIN devices d ON d.id=s.device_id
+            WHERE s.token_hash=? AND s.revoked=0''',(digest,)).fetchone()
+def session_ok(row):
+    if not row or row['status']!='active' or row['device_revoked']: return False
+    exp=parse_dt(row['expires_at']); return bool(exp and exp>now())
+def api_error(h,msg,status=400): h.send_json({'status':'error','message':msg,'detail':msg},status)
+def activate_code(h,data):
+    code=str(data.get('code','')).strip().upper(); install=str(data.get('install_id','')).strip(); name=str(data.get('device_name','Dispositivo'))[:120]
+    if not code or not install: return api_error(h,'Código o identificador de dispositivo no válido.',400)
+    with db() as x:
+        pair=x.execute('SELECT * FROM pair_codes WHERE code=? AND used_at IS NULL',(code,)).fetchone()
+        if pair:
+            if parse_dt(pair['expires_at'])<=now(): return api_error(h,'El código adicional ha caducado.',403)
+            user=x.execute('SELECT * FROM users WHERE id=?',(pair['user_id'],)).fetchone()
+            if not user or user['status']!='active' or not parse_dt(user['expires_at']) or parse_dt(user['expires_at'])<=now(): return api_error(h,'La cuenta no está activa.',403)
+            uid=user['id']
         else:
-            c.execute(
-                "UPDATE servers SET active=? WHERE id=?",
-                (1 if action == "on" else 0, sid)
-            )
-
-        changed = c.total_changes
-
-    await update.message.reply_text(
-        "✅ Operación aplicada. Los usuarios verán el cambio "
-        "al actualizar sus servidores o reabrir la aplicación."
-    )
-
-
-async def offserver(u, c):
-    await server_action(u, c, "off")
-
-
-async def onserver(u, c):
-    await server_action(u, c, "on")
-
-
-async def delserver(u, c):
-    await server_action(u, c, "delete")
-
-
-async def ayuda(update, context):
-    await panel(update, context)
-
-
-# =========================================================
-# SERVIDOR WEB PARA EL HTML
-# =========================================================
-
-class WebHandler(BaseHTTPRequestHandler):
-
-    def send_json(self, data, status=200):
-        body = json.dumps(data).encode("utf-8")
-
-        self.send_response(status)
-        self.send_header(
-            "Content-Type",
-            "application/json; charset=utf-8"
-        )
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header(
-            "Access-Control-Allow-Methods",
-            "POST, GET, OPTIONS, HEAD"
-        )
-        self.send_header(
-            "Access-Control-Allow-Headers",
-            "Content-Type, Authorization"
-        )
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-
-        if self.command != "HEAD":
-            self.wfile.write(body)
-
-    def do_OPTIONS(self):
-        self.send_json({"status": "ok"})
-
-    def do_HEAD(self):
-        self.send_json({"status": "online"})
-
+            row=x.execute('SELECT * FROM activation_codes WHERE code=? AND used_at IS NULL',(code,)).fetchone()
+            if not row: return api_error(h,'Código incorrecto o ya utilizado.',403)
+            if parse_dt(row['expires_at'])<=now(): return api_error(h,'El código de activación ha caducado.',403)
+            exp=now()+timedelta(days=30*row['months'])
+            cur=x.execute("INSERT INTO users(status,expires_at,max_devices) VALUES('active',?,?)",(iso(exp),row['devices'])); uid=cur.lastrowid
+            x.execute('UPDATE activation_codes SET used_at=?,used_by=? WHERE code=?',(iso(),uid,code))
+        dev=x.execute('SELECT * FROM devices WHERE user_id=? AND install_id=?',(uid,install)).fetchone()
+        if not dev:
+            active=x.execute('SELECT COUNT(*) n FROM devices WHERE user_id=? AND revoked=0',(uid,)).fetchone()['n']
+            cap=x.execute('SELECT max_devices FROM users WHERE id=?',(uid,)).fetchone()['max_devices']
+            if active>=cap: return api_error(h,'Has alcanzado el límite de dispositivos de esta cuenta.',403)
+            did=x.execute('INSERT INTO devices(user_id,install_id,device_name,last_seen,revoked) VALUES(?,?,?,?,0)',(uid,install,name,iso())).lastrowid
+        else:
+            if dev['revoked']: return api_error(h,'Este dispositivo ha sido revocado.',403)
+            did=dev['id']; x.execute('UPDATE devices SET device_name=?,last_seen=? WHERE id=?',(name,iso(),did))
+        if pair:
+            x.execute('UPDATE pair_codes SET used_at=? WHERE code=?',(iso(),code))
+        raw=secrets.token_urlsafe(36)
+        x.execute('INSERT INTO sessions(user_id,device_id,token_hash,created_at,revoked) VALUES(?,?,?,?,0)',(uid,did,token_hash(raw),iso()))
+    h.send_json({'status':'success','session_token':raw,'user_id':uid,'servers':list_servers()})
+def list_servers():
+    with db() as x: rows=x.execute('SELECT id,name,kind,url,username_enc,password_enc FROM servers WHERE active=1 ORDER BY id').fetchall()
+    return [{'id':r['id'],'name':r['name'],'kind':r['kind'],'url':r['url'],'username':decrypt(r['username_enc']),'password':decrypt(r['password_enc'])} for r in rows]
+class Handler(BaseHTTPRequestHandler):
+    def send_json(self,data,status=200):
+        body=json.dumps(data,ensure_ascii=False).encode(); self.send_response(status); self.send_header('Content-Type','application/json; charset=utf-8'); self.send_header('Access-Control-Allow-Origin','*'); self.send_header('Access-Control-Allow-Methods','GET,POST,OPTIONS,HEAD'); self.send_header('Access-Control-Allow-Headers','Content-Type, Authorization'); self.send_header('Cache-Control','no-store'); self.send_header('Content-Length',str(len(body))); self.end_headers()
+        if self.command!='HEAD': self.wfile.write(body)
+    def do_OPTIONS(self): self.send_json({'status':'ok'})
+    def do_HEAD(self): self.send_json({'status':'online'})
     def do_GET(self):
-        if self.path == "/" or self.path.startswith("/health"):
-            self.send_json({"status": "online"})
-        else:
-            self.send_json(
-                {
-                    "status": "error",
-                    "message": "Ruta no encontrada"
-                },
-                status=404
-            )
-
+        if self.path in ('/','/health','/healthz'): self.send_json({'status':'online','service':'TEILOR PLAYER API'})
+        elif self.path=='/api/servers': self.servers()
+        else: api_error(self,'Ruta no encontrada.',404)
     def do_POST(self):
         try:
-            content_length = int(
-                self.headers.get("Content-Length", 0)
-            )
-
-            if content_length <= 0 or content_length > 1024 * 1024:
-                self.send_json(
-                    {
-                        "status": "error",
-                        "message": "Petición inválida"
-                    },
-                    status=400
-                )
-                return
-
-            post_data = self.rfile.read(content_length)
-            data = json.loads(post_data.decode("utf-8"))
-            action = data.get("action", "")
-
-            # Obtener servidores activos
-            if action == "get_servers":
-                with db() as c:
-                    rows = c.execute(
-                        """SELECT id, name, kind, url,
-                        username_enc, password_enc
-                        FROM servers WHERE active=1
-                        ORDER BY id"""
-                    ).fetchall()
-
-                servers_list = []
-
-                for r in rows:
-                    servers_list.append({
-                        "id": r["id"],
-                        "name": r["name"],
-                        "kind": r["kind"],
-                        "url": r["url"],
-                        "username": decrypt(r["username_enc"]),
-                        "password": decrypt(r["password_enc"])
-                    })
-
-                self.send_json({
-                    "status": "success",
-                    "servers": servers_list
-                })
-                return
-
-            # Activación: no devolver éxito falso.
-            if action in ("activate", "activation", "check_code"):
-                self.send_json(
-                    {
-                        "status": "error",
-                        "message": (
-                            "Validación de activación no implementada "
-                            "en este endpoint."
-                        )
-                    },
-                    status=501
-                )
-                return
-
-            self.send_json(
-                {
-                    "status": "error",
-                    "message": "Acción desconocida",
-                    "action": action
-                },
-                status=400
-            )
-
-        except json.JSONDecodeError:
-            self.send_json(
-                {
-                    "status": "error",
-                    "message": "JSON inválido"
-                },
-                status=400
-            )
-
+            n=int(self.headers.get('Content-Length','0'))
+            if n<0 or n>100000: return api_error(self,'Petición demasiado grande.',413)
+            data=json.loads(self.rfile.read(n).decode() or '{}')
+            if not isinstance(data,dict): return api_error(self,'JSON no válido.')
+            path=urlparse(self.path).path
+            if path=='/api/activate': return activate_code(self,data)
+            row=get_auth_session(self)
+            if not session_ok(row): return api_error(self,'Sesión inválida, revocada o caducada. Vuelve a activar el dispositivo.',401)
+            with db() as x: x.execute('UPDATE devices SET last_seen=? WHERE id=?',(iso(),row['device_id']))
+            if path=='/api/heartbeat': return self.send_json({'status':'success','user_id':row['user_id']})
+            if path=='/api/servers': return self.send_json({'status':'success','servers':list_servers()})
+            if path=='/api/logout':
+                with db() as x: x.execute('UPDATE sessions SET revoked=1 WHERE id=?',(row['session_id'],))
+                return self.send_json({'status':'success'})
+            return api_error(self,'Ruta no encontrada.',404)
+        except (ValueError,TypeError,json.JSONDecodeError): return api_error(self,'JSON o datos no válidos.',400)
         except Exception as e:
-            print("Error HTTP:", repr(e))
-
-            self.send_json(
-                {
-                    "status": "error",
-                    "message": "Error interno del servidor"
-                },
-                status=500
-            )
-
-    def log_message(self, format, *args):
-        print("[HTTP]", format % args)
-
-
-# =========================================================
-# INICIAR SERVIDOR WEB
-# =========================================================
-
-def run_web_server():
-    port = int(os.environ.get("PORT", 10000))
-
-    server = ThreadingHTTPServer(
-        ("0.0.0.0", port),
-        WebHandler
-    )
-
-    print(f"Servidor Web escuchando en el puerto {port}")
-    server.serve_forever()
-
-
-# =========================================================
-# INICIAR BOT
-# =========================================================
-
+            print('API error:',repr(e)); return api_error(self,'Error interno del servidor.',500)
+    def servers(self):
+        row=get_auth_session(self)
+        if not session_ok(row): return api_error(self,'Sesión inválida o caducada.',401)
+        self.send_json({'status':'success','servers':list_servers()})
+    def log_message(self,fmt,*args): print('[HTTP]',fmt%args)
+def run_http():
+    port=int(os.environ.get('PORT','10000')); ThreadingHTTPServer(('0.0.0.0',port),Handler).serve_forever()
 def main():
-    if not TOKEN:
-        raise SystemExit(
-            "Falta TELEGRAM_BOT_TOKEN. "
-            "Configúralo en las variables Environment de Render."
-        )
-
-    init_db()
-
-    app = Application.builder().token(TOKEN).build()
-
-    commands = [
-        ("start", start),
-        ("id", id_cmd),
-        ("panel", panel),
-        ("ayuda", ayuda),
-        ("crear", crear),
-        ("usuarios", usuarios),
-        ("bloquear", bloquear),
-        ("activar", activar),
-        ("borrar", borrar),
-        ("renovar", renovar),
-        ("limite", limite),
-        ("dispositivos", dispositivos),
-        ("vincular", vincular),
-        ("revocadispositivo", revocadispositivo),
-        ("addxtream", addxtream),
-        ("addm3u", addm3u),
-        ("servidores", servidores),
-        ("offserver", offserver),
-        ("onserver", onserver),
-        ("delserver", delserver),
-    ]
-
-    for cmd, fn in commands:
-        app.add_handler(CommandHandler(cmd, fn))
-
-    web_thread = threading.Thread(
-        target=run_web_server,
-        daemon=True
-    )
-
-    web_thread.start()
-
-    print("TEILOR bot iniciado y Web escuchando...")
-
-    app.run_polling()
-
-
-if __name__ == "__main__":
-    main()
+    if not TOKEN: raise SystemExit('Configura TELEGRAM_BOT_TOKEN en Render.')
+    init_db(); threading.Thread(target=run_http,daemon=True).start()
+    app=Application.builder().token(TOKEN).build()
+    cmds=[('start',start),('id',id_cmd),('panel',panel),('ayuda',ayuda),('crear',crear),('usuarios',usuarios),('bloquear',bloquear),('activar',activar),('borrar',borrar),('renovar',renovar),('limite',limite),('dispositivos',dispositivos),('vincular',vincular),('revocadispositivo',revocadispositivo),('addxtream',addxtream),('addm3u',addm3u),('servidores',servidores),('offserver',offserver),('onserver',onserver),('delserver',delserver)]
+    for name,fn in cmds: app.add_handler(CommandHandler(name,fn))
+    print('TEILOR PLAYER API + Telegram arrancados'); app.run_polling()
+if __name__=='__main__': main()
