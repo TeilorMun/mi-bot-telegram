@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: teilor-player
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    plan: starter
+    disk:
+      name: teilor-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: FERNET_KEY
+        sync: false
+      - key: ADMIN_IDS
+        value: "740151755"
+      - key: DB_PATH
+        value: /var/data/teilor.db
