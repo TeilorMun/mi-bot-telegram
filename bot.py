@@ -1,4 +1,5 @@
-import os, re, asyncio
+import os, re, asyncio, threading, json
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -165,10 +166,50 @@ async def onserver(u,c): await server_action(u,c,'on')
 async def delserver(u,c): await server_action(u,c,'delete')
 async def ayuda(update,context): await panel(update,context)
 
+# --- SERVIDOR WEB PARA EL REPRODUCTOR HTML ---
+class WebHandler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def do_POST(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        
+        # Aquí va la lógica de validación
+        response = {"status": "success", "message": "Activación correcta", "token": "test_token_123"}
+        self.wfile.write(json.dumps(response).encode('utf-8'))
+        
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(b'{"status": "online"}')
+
+def run_web_server():
+    port = int(os.environ.get('PORT', 10000))
+    server = HTTPServer(('0.0.0.0', port), WebHandler)
+    print(f"Servidor Web escuchando en el puerto {port}")
+    server.serve_forever()
+
 def main():
     if not TOKEN: raise SystemExit('Configura TELEGRAM_BOT_TOKEN en .env')
-    init_db(); app=Application.builder().token(TOKEN).build()
+    init_db(); 
+    app=Application.builder().token(TOKEN).build()
     for cmd,fn in [('start',start),('id',id_cmd),('panel',panel),('ayuda',ayuda),('crear',crear),('usuarios',usuarios),('bloquear',bloquear),('activar',activar),('borrar',borrar),('renovar',renovar),('limite',limite),('dispositivos',dispositivos),('vincular',vincular),('revocadispositivo',revocadispositivo),('addxtream',addxtream),('addm3u',addm3u),('servidores',servidores),('offserver',offserver),('onserver',onserver),('delserver',delserver)]: app.add_handler(CommandHandler(cmd,fn))
-    print('TEILOR bot iniciado')
+    
+    # Arrancamos el servidor web en un hilo paralelo para que no bloquee a Telegram
+    web_thread = threading.Thread(target=run_web_server)
+    web_thread.daemon = True
+    web_thread.start()
+    
+    print('TEILOR bot iniciado y Web escuchando...')
     app.run_polling()
+
 if __name__=='__main__': main()
