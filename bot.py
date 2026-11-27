@@ -181,8 +181,35 @@ class WebHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         
-        # Aquí va la lógica de validación
-        response = {"status": "success", "message": "Activación correcta", "token": "test_token_123"}
+        # Leemos qué está pidiendo el HTML
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data) if post_data else {}
+            action = data.get("action", "")
+            
+            if action == "get_servers":
+                with db() as c:
+                    rows = c.execute('SELECT id, name, kind, url, username_enc, password_enc FROM servers WHERE active=1').fetchall()
+                
+                servers_list = []
+                for r in rows:
+                    servers_list.append({
+                        "id": r["id"],
+                        "name": r["name"],
+                        "kind": r["kind"],
+                        "url": r["url"],
+                        "username": decrypt(r["username_enc"]),
+                        "password": decrypt(r["password_enc"])
+                    })
+                response = {"status": "success", "servers": servers_list}
+            else:
+                # Respuesta genérica de activación
+                response = {"status": "success", "message": "Activación correcta", "token": "test_token_123"}
+                
+        except Exception as e:
+            response = {"status": "error", "message": str(e)}
+
         self.wfile.write(json.dumps(response).encode('utf-8'))
         
     def do_GET(self):
@@ -204,7 +231,7 @@ def main():
     app=Application.builder().token(TOKEN).build()
     for cmd,fn in [('start',start),('id',id_cmd),('panel',panel),('ayuda',ayuda),('crear',crear),('usuarios',usuarios),('bloquear',bloquear),('activar',activar),('borrar',borrar),('renovar',renovar),('limite',limite),('dispositivos',dispositivos),('vincular',vincular),('revocadispositivo',revocadispositivo),('addxtream',addxtream),('addm3u',addm3u),('servidores',servidores),('offserver',offserver),('onserver',onserver),('delserver',delserver)]: app.add_handler(CommandHandler(cmd,fn))
     
-    # Arrancamos el servidor web en un hilo paralelo para que no bloquee a Telegram
+    # Arrancamos el servidor web en un hilo paralelo
     web_thread = threading.Thread(target=run_web_server)
     web_thread.daemon = True
     web_thread.start()
