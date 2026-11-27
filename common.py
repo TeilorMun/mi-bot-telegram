@@ -2,8 +2,8 @@ import sqlite3, time, random, string, os
 from datetime import datetime, timedelta, timezone
 from cryptography.fernet import Fernet
 
-# Clave secreta para encriptar
-SECRET_KEY = b'vF8aZ3mN9pQ2xL5kR7tY1wJ4hC6bG0dS_E-uI-oA='
+# El programa crea la clave secreta solo. ¡Nunca falla!
+SECRET_KEY = Fernet.generate_key()
 cipher = Fernet(SECRET_KEY)
 
 def encrypt(text):
