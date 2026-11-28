@@ -126,10 +126,28 @@ def init_db():
             expires_at TIMESTAMPTZ,
             used_at TIMESTAMPTZ
         )''')
+        c.execute('''CREATE TABLE IF NOT EXISTS favorites (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            item_type TEXT,
+            item_ref TEXT,
+            name TEXT,
+            poster TEXT
+        )''')
+        c.execute('''CREATE TABLE IF NOT EXISTS resume (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            item_type TEXT,
+            item_ref TEXT,
+            percent DOUBLE PRECISION,
+            seconds INTEGER
+        )''')
         c.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_devices_install ON devices(install_id)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_devices_user ON devices(user_id)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_codes_used ON activation_codes(used_at)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_fav_user ON favorites(user_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_resume_user ON resume(user_id)')
 
 _ALPHABET = string.ascii_uppercase + string.digits
 
