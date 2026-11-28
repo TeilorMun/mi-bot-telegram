@@ -281,3 +281,736 @@ body { background-color: var(--bg-darker); background-image: radial-gradient(cir
 #teilorConnectionHint{display:none;margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.035);color:var(--text-muted);font-size:.78rem;text-align:left}
 #teilorConnectionHint.show{display:block}
 </style>
+</head>
+<body>
+<div class="loading-screen" id="loadingScreen"><div class="loading-logo">TEILOR PLAYER</div><div class="loading-spinner"></div><div class="loading-text">Iniciando TEILOR PLAYER</div></div>
+<div class="login-container" id="loginContainer">
+<div class="login-box">
+<div class="login-logo"><div class="login-logo-icon"><i class="fas fa-play-circle"></i></div><h1 class="login-title">TEILOR PLAYER</h1><p class="login-subtitle">Streaming Premium</p></div>
+<form class="login-form" id="loginForm">
+<div class="form-group"><label for="activationCode">Código de activación</label><input type="text" class="form-control" id="activationCode" placeholder="Introduce tu código de TEILOR" autocomplete="one-time-code" autocapitalize="characters" required tabindex="0"></div>
+<div class="form-group" id="serverSelectGroup" style="display:none"><label for="serverSelect">Elige el servidor</label><select class="form-control" id="serverSelect"></select></div>
+<div class="login-error" id="loginError"></div>
+<div id="teilorConnectionHint"><b>TEILOR · Ayuda</b><br>Introduce el código de activación que te ha facilitado el administrador. Si todavía no tienes uno, contacta con soporte.</div>
+<button type="submit" class="login-btn" id="loginBtn" tabindex="0"><i class="fas fa-key"></i> Activar y continuar</button>
+</form>
+<div class="login-footer"><p>TEILOR PLAYER © 2026 • Todos los derechos reservados</p></div>
+</div>
+</div>
+<div class="app-container" id="appContainer">
+<nav class="top-nav">
+<div class="nav-brand" id="navBrand" tabindex="0"><i class="fas fa-play-circle nav-brand-icon"></i><span class="nav-brand-text">TEILOR PLAYER</span></div>
+<div class="nav-links">
+<button class="nav-link active" data-page="live" tabindex="0"><i class="fas fa-tv"></i> Canales</button>
+<button class="nav-link" data-page="movies" tabindex="0"><i class="fas fa-film"></i> Películas</button>
+<button class="nav-link" data-page="series" tabindex="0"><i class="fas fa-video"></i> Series</button>
+<button class="nav-link" data-page="favorites" tabindex="0"><i class="fas fa-heart"></i> Favoritos</button>
+</div>
+<div class="nav-search"><i class="fas fa-search search-icon"></i><input type="text" id="globalSearch" placeholder="Buscar contenido..." autocomplete="off" tabindex="0"><button class="clear-search" id="clearSearch" tabindex="0"><i class="fas fa-times"></i></button></div>
+<div class="nav-user">
+<div class="nav-user-info" id="userMenuTrigger" tabindex="0">
+<div class="nav-user-avatar" id="userAvatar">U</div>
+<div><div class="nav-user-name" id="userName">Usuario</div><div class="nav-user-status"><i class="fas fa-circle" style="font-size:0.5rem;"></i> En línea</div></div>
+</div>
+<div class="profile-dropdown" id="profileDropdown">
+<button class="dropdown-item" id="btnUpdateList" tabindex="0"><i class="fas fa-sync-alt"></i> Actualizar lista</button>
+<button class="dropdown-item" id="btnSwitchServer" tabindex="0"><i class="fas fa-server"></i> Cambiar servidor</button>
+<button class="dropdown-item" id="btnLoadNew" tabindex="0"><i class="fas fa-exchange-alt"></i> Cargar una nueva</button>
+<button class="dropdown-item" id="btnThemeSettings" tabindex="0"><i class="fas fa-palette"></i> Color del Tema</button>
+<button class="dropdown-item" id="btnToggleFullscreen" tabindex="0"><i class="fas fa-expand-arrows-alt"></i> Pantalla Completa de la App</button>
+<button class="dropdown-item" id="btnOurTeam" tabindex="0"><i class="fas fa-users"></i> Nuestro Equipo</button>
+<div class="dropdown-divider"></div>
+<button class="dropdown-item" id="btnLogout" tabindex="0"><i class="fas fa-sign-out-alt"></i> Salir de la cuenta</button>
+</div>
+</div>
+</nav>
+<div class="main-content" id="mainContent"></div>
+<nav class="mobile-nav">
+<div class="mobile-nav-links">
+<button class="mobile-nav-link active" data-page="live" tabindex="0"><i class="fas fa-tv"></i><span>Canales</span></button>
+<button class="mobile-nav-link" data-page="movies" tabindex="0"><i class="fas fa-film"></i><span>Películas</span></button>
+<button class="mobile-nav-link" data-page="series" tabindex="0"><i class="fas fa-video"></i><span>Series</span></button>
+<button class="mobile-nav-link" data-page="favorites" tabindex="0"><i class="fas fa-heart"></i><span>Favoritos</span></button>
+<button class="mobile-nav-link" id="mobileSettingsBtn" tabindex="0"><i class="fas fa-cog"></i><span>Config</span></button>
+</div>
+</nav>
+</div>
+<div class="player-page" id="playerPage">
+<div class="player-top">
+<button class="player-back" id="playerBack" tabindex="0"><i class="fas fa-arrow-left"></i></button>
+<div class="player-title-top" id="playerTitleTop">Reproduciendo</div>
+<div style="width: 44px;"></div>
+</div>
+<div class="player-video-wrap" id="playerVideoWrap">
+<video id="videoPlayer" playsinline></video>
+<div class="quality-indicator" id="qualityIndicator">HD</div>
+<div class="player-loading" id="playerLoading"><div class="loading-spinner"></div><div class="loading-text">Cargando vídeo...</div></div>
+<div class="player-error" id="playerError"><i class="fas fa-exclamation-circle"></i><p>Error al cargar el vídeo.</p><button class="retry-btn" id="btnRetry" tabindex="0"><i class="fas fa-redo"></i> Intentar de nuevo</button></div>
+<div class="channel-switch-banner" id="channelSwitchBanner">
+<i class="fas fa-tv"></i>
+<div class="channel-name" id="channelSwitchName"></div>
+<div class="channel-info" id="channelSwitchInfo"></div>
+</div>
+<div class="next-ep-banner" id="nextEpBanner">
+<div class="next-ep-banner-text">Próximo episodio en <strong id="nextEpCountdown">15</strong>s</div>
+<button class="next-ep-banner-btn" id="btnNextEpNow" tabindex="0"><i class="fas fa-forward"></i> Saltar</button>
+</div>
+<div class="player-controls-overlay" id="playerControls">
+<div class="player-progress-wrap"><div class="player-progress" id="playerProgress" tabindex="0"><div class="player-progress-fill" id="playerProgressFill"></div></div></div>
+<div class="player-time-row"><span id="playerCurrentTime">00:00:00</span><span id="playerDuration">00:00:00</span></div>
+<div class="player-buttons" id="playerButtonsRow">
+<button class="player-btn" id="btnPrev" title="Anterior" tabindex="0"><i class="fas fa-step-backward"></i><span class="nav-btn-label" id="btnPrevLabel">Anterior</span></button>
+<button class="player-btn" id="btnRewind" title="-10s" tabindex="0"><i class="fas fa-backward"></i></button>
+<button class="player-btn play-btn" id="btnPlay" title="Play/Pause" tabindex="0"><i class="fas fa-play"></i></button>
+<button class="player-btn" id="btnForward" title="+10s" tabindex="0"><i class="fas fa-forward"></i></button>
+<button class="player-btn" id="btnNext" title="Siguiente" tabindex="0"><i class="fas fa-step-forward"></i><span class="nav-btn-label" id="btnNextLabel">Siguiente</span></button>
+</div>
+<div class="player-bottom-actions">
+<div class="player-volume-wrap">
+<button class="player-bottom-btn" id="btnMute" title="Silenciar" tabindex="0"><i class="fas fa-volume-up"></i></button>
+<input type="range" class="player-volume-slider" id="volumeSlider" min="0" max="1" step="0.05" value="1" tabindex="0">
+</div>
+<div style="display:flex; gap: 8px;">
+<button class="player-bottom-btn" id="btnPiP" title="Picture in Picture" tabindex="0"><i class="fas fa-external-link-alt"></i> PiP</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="modal-overlay" id="teamModal"><div class="modal-content"><h2><i class="fas fa-users"></i> Nuestro Equipo</h2><p>Desarrollado con pasión y dedicación por <strong>TEILOR PLAYER</strong>.</p><p style="margin-top: 15px; font-size: 0.85rem; color: var(--text-muted);">Versión Teilor Player • 2026</p><button class="modal-close" id="closeTeamModal" tabindex="0">Cerrar</button></div></div>
+<div class="modal-overlay" id="themeModal"><div class="modal-content"><h2><i class="fas fa-palette"></i> Color del Tema</h2><p>Elige el color principal de la aplicación:</p><div class="theme-grid" id="themeGrid">
+<div class="theme-color active" style="background: #00ff88;" data-color="#00ff88" data-dark="#00cc6a" tabindex="0"></div>
+<div class="theme-color" style="background: #b026ff;" data-color="#b026ff" data-dark="#8a2be2" tabindex="0"></div>
+<div class="theme-color" style="background: #ff0055;" data-color="#ff0055" data-dark="#cc0044" tabindex="0"></div>
+<div class="theme-color" style="background: #00e5ff;" data-color="#00e5ff" data-dark="#00b8d4" tabindex="0"></div>
+<div class="theme-color" style="background: #ff9800;" data-color="#ff9800" data-dark="#f57c00" tabindex="0"></div>
+<div class="theme-color" style="background: #f44336;" data-color="#f44336" data-dark="#d32f2f" tabindex="0"></div>
+</div><button class="modal-close" id="closeThemeModal" tabindex="0">Cerrar</button></div></div>
+<div class="modal-overlay" id="settingsModal"><div class="modal-content"><h2><i class="fas fa-cog"></i> Configuración</h2><div style="display:flex; flex-direction:column; gap:10px; margin: 20px 0; width: 100%;">
+<button class="modal-close" id="btnUpdateListModal" style="margin:0; text-align:left; display:flex; align-items:center; gap:10px;" tabindex="0"><i class="fas fa-sync-alt"></i> Actualizar lista</button>
+<button class="modal-close" id="btnLoadNewModal" style="margin:0; text-align:left; display:flex; align-items:center; gap:10px;" tabindex="0"><i class="fas fa-exchange-alt"></i> Cargar una nueva</button>
+<button class="modal-close" id="btnThemeSettingsModal" style="margin:0; text-align:left; display:flex; align-items:center; gap:10px;" tabindex="0"><i class="fas fa-palette"></i> Color del Tema</button>
+<button class="modal-close" id="btnToggleFullscreenModal" style="margin:0; text-align:left; display:flex; align-items:center; gap:10px;" tabindex="0"><i class="fas fa-expand-arrows-alt"></i> Pantalla Completa de la App</button>
+<button class="modal-close" id="btnOurTeamModal" style="margin:0; text-align:left; display:flex; align-items:center; gap:10px;" tabindex="0"><i class="fas fa-users"></i> Nuestro Equipo</button>
+<div class="dropdown-divider" style="margin: 8px 0;"></div>
+<button class="modal-close" id="btnLogoutModal" style="margin:0; text-align:left; display:flex; align-items:center; gap:10px; background: rgba(255, 51, 102, 0.1); color: var(--error); border-color: var(--error);" tabindex="0"><i class="fas fa-sign-out-alt"></i> Salir de la cuenta</button>
+</div><button class="modal-close" id="closeSettingsModal" style="margin-top:12px;" tabindex="0">Cerrar</button></div></div>
+<div class="notification" id="notification"></div>
+<script>
+// Cambia esta URL por la dirección HTTPS pública de tu backend.
+window.TEILOR_API_BASE = window.TEILOR_API_BASE || 'https://mi-bot-telegram.onrender.com';
+(function() {
+'use strict';
+   const API = window.TEILOR_API_BASE;
+const $ = (id) => document.getElementById(id);
+const state = {
+	token: null, user: null, servers: [], serverId: null, activePage: 'live', activeCat: 'all',
+	live: [], movies: [], series: [], cats: { live: [], movies: [], series: [] },
+	favorites: [], currentItem: null, currentType: null, currentEpisodes: [], currentEpIndex: -1,
+	loading: false, searchTerm: '', sortMode: 'name-asc', zappingList: [], zappingIndex: -1,
+	lastChannelSwitch: 0, nextEpTimer: null, resumeMap: {}, epicMode: 'auto', epAutoplay: true,
+	serverName: '', playerReady: false
+};
+let hls = null;
+let ctrlTimer = null;
+const LS = {
+	get(k, d) { try { const v = localStorage.getItem('teilor_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+	set(k, v) { try { localStorage.setItem('teilor_' + k, JSON.stringify(v)); } catch (e) {} },
+	del(k) { try { localStorage.removeItem('teilor_' + k); } catch (e) {} }
+};
+function getInstallId() {
+	let id = LS.get('install_id', null);
+	if (!id) { id = 'inst-' + Math.random().toString(36).slice(2) + Date.now().toString(36); LS.set('install_id', id); }
+	return id;
+}
+function deviceName() {
+	const ua = navigator.userAgent;
+	if (/android/i.test(ua)) return 'Android';
+	if (/iphone|ipad|ipod/i.test(ua)) return 'iPhone/iPad';
+	if (/smart-tv|smarttv|googletv|appletv|hbbtv|netcast|webos|tizen/i.test(ua)) return 'Smart TV';
+	return 'Navegador';
+}
+async function api(path, opts) {
+	opts = opts || {};
+	const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+	if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
+	let res;
+	try {
+		res = await fetch(API + path, { method: opts.method || 'GET', headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+	} catch (e) {
+		throw new Error('Sin conexión con el servidor. Comprueba tu red.');
+	}
+	let data = null;
+	try { data = await res.json(); } catch (e) { data = null; }
+	if (res.status === 401) { logout(true); throw new Error((data && data.error) || 'Sesión caducada.'); }
+	if (!res.ok) throw new Error((data && data.error) || ('Error ' + res.status));
+	return data;
+}
+function notify(msg, isError) {
+	const n = $('notification');
+	n.textContent = msg;
+	n.className = 'notification show' + (isError ? ' error' : '');
+	clearTimeout(n._t);
+	n._t = setTimeout(() => { n.className = 'notification'; }, 3200);
+}
+function fmtTime(s) {
+	if (!isFinite(s) || s < 0) s = 0;
+	const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+	return [h, m, sec].map(x => String(x).padStart(2, '0')).join(':');
+}
+function posterOf(item) {
+	return item.poster || item.logo || item.cover || '';
+}
+function applyTheme(color, dark) {
+	document.documentElement.style.setProperty('--primary', color);
+	document.documentElement.style.setProperty('--primary-dark', dark);
+	LS.set('theme', { color: color, dark: dark });
+}
+(function initTheme() {
+	const t = LS.get('theme', null);
+	if (t && t.color) applyTheme(t.color, t.dark || t.color);
+})();
+function showLogin() {
+	$('appContainer').style.display = 'none';
+	$('loginContainer').style.display = 'flex';
+	$('loginContainer').setAttribute('aria-modal', 'true');
+}
+function showApp() {
+	$('loginContainer').style.display = 'none';
+	$('appContainer').style.display = 'block';
+	const u = state.user || {};
+	$('userName').textContent = u.telegram_user || 'Usuario';
+	$('userAvatar').textContent = (u.telegram_user || 'U').charAt(0).toUpperCase();
+}
+async function doLogin(code) {
+	$('loginError').style.display = 'none';
+	$('loginBtn').disabled = true;
+	try {
+		const data = await api('/api/activate', {
+			method: 'POST',
+			body: { code: code.trim().toUpperCase(), install_id: getInstallId(), device_name: deviceName() }
+		});
+		state.token = data.token;
+		state.user = data.user;
+		state.servers = data.servers || [];
+		state.serverId = data.server_id || (state.servers[0] && state.servers[0].id) || null;
+		LS.set('token', state.token);
+		showApp();
+		await bootData();
+	} catch (e) {
+		$('loginError').textContent = e.message;
+		$('loginError').style.display = 'block';
+	} finally {
+		$('loginBtn').disabled = false;
+	}
+}
+function logout(silent) {
+	LS.del('token');
+	state.token = null;
+	if (hls) { hls.destroy(); hls = null; }
+	closePlayer();
+	showLogin();
+	$('activationCode').value = '';
+	if (!silent) notify('Sesión cerrada.');
+}
+async function restoreSession() {
+	const t = LS.get('token', null);
+	if (!t) return false;
+	state.token = t;
+	try {
+		const data = await api('/api/me');
+		state.user = data.user;
+		state.servers = data.servers || [];
+		state.serverId = data.server_id || (state.servers[0] && state.servers[0].id) || null;
+		showApp();
+		await bootData();
+		return true;
+	} catch (e) {
+		state.token = null;
+		LS.del('token');
+		return false;
+	}
+}
+async function bootData() {
+	const s = state.servers.find(x => x.id === state.serverId) || state.servers[0];
+	if (s) {
+		state.serverId = s.id;
+		state.serverName = s.name || '';
+		$('serverSelectGroup').style.display = 'none';
+		await refreshCatalog();
+	} else {
+		$('serverSelect').innerHTML = '<option>Sin servidor disponible</option>';
+		$('serverSelectGroup').style.display = 'block';
+		notify('No tienes servidores asignados.', true);
+	}
+}
+async function refreshCatalog() {
+	state.loading = true;
+	renderCurrentPage();
+	try {
+		const data = await api('/api/catalog?server_id=' + encodeURIComponent(state.serverId || ''));
+		state.live = data.live || [];
+		state.movies = data.movies || [];
+		state.series = data.series || [];
+		state.cats = data.categorias || { live: [], movies: [], series: [] };
+	} catch (e) {
+		notify(e.message, true);
+	} finally {
+		state.loading = false;
+		renderCurrentPage();
+	}
+}
+function switchPage(page) {
+	if (page === 'favorites') renderFavorites();
+	else { state.activePage = page; state.activeCat = 'all'; state.searchTerm = ''; $('globalSearch').value = ''; renderCurrentPage(); }
+	document.querySelectorAll('.nav-link, .mobile-nav-link').forEach(a => a.classList.toggle('active', a.dataset.page === page));
+	$('mainContent').scrollIntoView(true);
+}
+function renderCurrentPage() {
+	const mc = $('mainContent');
+	document.querySelectorAll('.nav-link, .mobile-nav-link').forEach(a => a.classList.toggle('active', a.dataset.page === state.activePage));
+	if (state.activePage === 'live') renderLive(mc);
+	else if (state.activePage === 'movies') renderGrid(mc, state.movies, 'movies');
+	else if (state.activePage === 'series') renderGrid(mc, state.series, 'series');
+}
+function sortItems(list) {
+	const out = list.slice();
+	if (state.sortMode === 'name-desc') out.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+	else if (state.sortMode === 'rating') out.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+	else if (state.sortMode === 'rating-asc') out.sort((a, b) => (a.rating || 0) - (b.rating || 0));
+	else out.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+	return out;
+}
+function sortHeader() {
+	return '<div class="content-header"><h2 style="font-size:1.1rem;">' +
+		(state.activeCat === 'all' ? 'Todo' : state.activeCat) +
+		'</h2><div class="content-sort"><select id="sortSelect">' +
+		'<option value="name-asc">Nombre A-Z</option><option value="name-desc">Nombre Z-A</option>' +
+		'<option value="rating">Mejor valoradas</option><option value="rating-asc">Peor valoradas</option>' +
+		'</select></div></div>';
+}
+function filterList(list) {
+	let out = list;
+	if (state.searchTerm) {
+		const q = state.searchTerm.toLowerCase();
+		out = out.filter(i => (i.name || '').toLowerCase().includes(q));
+	}
+	if (state.activeCat && state.activeCat !== 'all') out = out.filter(i => (i.genero || i.categoria || '') === state.activeCat);
+	return sortItems(out);
+}
+function renderGrid(mc, list, type) {
+	if (state.loading) { mc.innerHTML = '<div class="loading-container"><div class="loading-spinner"></div><p>Cargando catálogo...</p></div>'; return; }
+	const items = filterList(list);
+	const cats = state.cats[type] || [];
+	mc.innerHTML = '<div class="content-page">' +
+		'<aside class="content-sidebar"><div class="sidebar-icon"><i class="fas fa-' + (type === 'movies' ? 'film' : 'video') + '"></i></div>' +
+		'<div class="sidebar-categories"><div class="sidebar-cat' + (state.activeCat === 'all' ? ' active' : '') + '" data-cat="all"><span class="sidebar-cat-name">Todas</span><span class="sidebar-cat-count">' + list.length + '</span></div>' +
+		cats.map(c => '<div class="sidebar-cat' + (state.activeCat === c ? ' active' : '') + '" data-cat="' + esc(c) + '"><span class="sidebar-cat-name">' + esc(c) + '</span></div>').join('') +
+		'</div></aside>' +
+		'<div class="content-main">' + sortHeader() +
+		(items.length ? '<div class="content-grid">' + items.map(i => cardHtml(i, type)).join('') + '</div>'
+			: '<div class="empty-state"><i class="fas fa-inbox"></i><h3>Sin resultados</h3><p>Prueba con otra búsqueda o categoría.</p></div>') +
+		'</div></div>';
+	bindGridEvents(mc, type);
+	$('sortSelect').value = state.sortMode;
+}
+function cardHtml(item, type) {
+	const isFav = state.favorites.some(f => String(f.item_ref) === String(item.id));
+	const poster = posterOf(item);
+	const progress = state.resumeMap[type + ':' + item.id];
+	return '<div class="content-card" data-id="' + esc(item.id) + '" data-type="' + type + '" tabindex="0">' +
+		'<div class="content-card-poster">' +
+			(poster ? '<img loading="lazy" src="' + esc(poster) + '" alt="" onerror="this.style.display=\'none\'">' : '') +
+			'<button class="content-card-fav' + (isFav ? ' active' : '') + '" data-fav="1"><i class="fas fa-heart"></i></button>' +
+			(item.rating ? '<div class="content-card-rating"><i class="fas fa-star"></i> ' + Number(item.rating).toFixed(1) + '</div>' : '') +
+			(progress ? '<div class="resume-badge"><span style="width:' + Math.min(100, progress.percent || 0) + '%"></span></div>' : '') +
+		'</div>' +
+		'<div class="content-card-title">' + esc(item.name) + '</div></div>';
+}
+function renderLive(mc) {
+	const list = filterList(state.live);
+	mc.innerHTML = '<div class="content-main">' + sortHeader() +
+		(list.length ? '<div class="live-grid">' + list.map(i =>
+			'<div class="live-card" data-id="' + esc(i.id) + '" data-type="live" tabindex="0">' +
+			(posterOf(i) ? '<img class="live-card-logo" loading="lazy" src="' + esc(posterOf(i)) + '" alt="" onerror="this.style.display=\'none\'">' : '') +
+			'<div class="live-card-name">' + esc(i.name) + '</div>' +
+			'<div class="live-card-live"><span class="live-dot"></span> EN VIVO</div></div>').join('') + '</div>'
+			: '<div class="empty-state"><i class="fas fa-tv"></i><h3>Sin canales</h3><p>La lista no tiene canales en directo.</p></div>') + '</div>';
+	$('sortSelect').value = state.sortMode;
+	mc.querySelectorAll('.live-card').forEach(c => {
+		c.addEventListener('click', () => openLive(Number(c.dataset.id)));
+	});
+}
+function bindGridEvents(mc, type) {
+	mc.querySelectorAll('.sidebar-cat').forEach(c => c.addEventListener('click', () => { state.activeCat = c.dataset.cat; renderCurrentPage(); }));
+	mc.querySelectorAll('.content-card').forEach(card => {
+		card.addEventListener('click', (ev) => {
+			if (ev.target.closest('[data-fav]')) { toggleFav(card.dataset.id, type); return; }
+			openDetail(card.dataset.id, type);
+		});
+	});
+}
+async function toggleFav(id, type) {
+	const item = (type === 'movies' ? state.movies : state.series).find(i => String(i.id) === String(id));
+	try {
+		if (state.favorites.some(f => String(f.item_ref) === String(id) && f.item_type === type)) {
+			await api('/api/favorites', { method: 'DELETE', body: { item_type: type, item_ref: String(id) } });
+			state.favorites = state.favorites.filter(f => !(String(f.item_ref) === String(id) && f.item_type === type));
+			notify('Quitado de favoritos');
+		} else {
+			await api('/api/favorites', { method: 'POST', body: { item_type: type, item_ref: String(id), name: item ? item.name : '', poster: item ? posterOf(item) : '' } });
+			state.favorites.push({ item_type: type, item_ref: String(id), name: item ? item.name : '', poster: item ? posterOf(item) : '' });
+			notify('Añadido a favoritos');
+		}
+		renderCurrentPage();
+	} catch (e) { notify(e.message, true); }
+}
+function renderFavorites() {
+	const mc = $('mainContent');
+	if (!state.favorites.length) {
+		mc.innerHTML = '<div class="empty-state"><i class="fas fa-heart"></i><h3>Sin favoritos</h3><p>Marca películas o series con el corazón.</p></div>';
+		return;
+	}
+	mc.innerHTML = '<div class="content-main"><div class="content-header"><h2 style="font-size:1.1rem;">Favoritos</h2></div><div class="content-grid">' +
+		state.favorites.map(f => '<div class="content-card" data-id="' + esc(f.item_ref) + '" data-type="' + esc(f.item_type) + '" tabindex="0">' +
+			'<div class="content-card-poster">' + (f.poster ? '<img loading="lazy" src="' + esc(f.poster) + '" onerror="this.style.display=\'none\'">' : '') + '<button class="content-card-fav active" data-fav="1"><i class="fas fa-heart"></i></button></div>' +
+			'<div class="content-card-title">' + esc(f.name || '') + '</div></div>').join('') + '</div></div>';
+	mc.querySelectorAll('.content-card').forEach(card => {
+		card.addEventListener('click', (ev) => {
+			if (ev.target.closest('[data-fav]')) { toggleFav(card.dataset.id, card.dataset.type).then(renderFavorites); return; }
+			openDetail(card.dataset.id, card.dataset.type);
+		});
+	});
+}
+async function openDetail(id, type) {
+	const item = (type === 'movies' ? state.movies : state.series).find(i => String(i.id) === String(id));
+	if (!item) return;
+	state.currentItem = item; state.currentType = type; state.currentEpisodes = []; state.currentEpIndex = -1;
+	const mc = $('mainContent');
+	const isFav = state.favorites.some(f => String(f.item_ref) === String(id) && f.item_type === type);
+	mc.innerHTML = '<div class="detail-page"><button class="detail-back" id="detailBack" tabindex="0"><i class="fas fa-arrow-left"></i> Volver</button>' +
+		'<div class="detail-content"><div class="detail-poster">' + (posterOf(item) ? '<img src="' + esc(posterOf(item)) + '" alt="">' : '') + '</div>' +
+		'<div class="detail-info"><h1 class="detail-title">' + esc(item.name) + '</h1>' +
+		(item.genero ? '<div class="detail-genres">' + esc(item.genero) + '</div>' : '') +
+		(item.rating ? '<div class="detail-rating"><div class="detail-stars">' + starsHtml(item.rating) + '</div><span class="detail-rating-count">' + Number(item.rating).toFixed(1) + '</span></div>' : '') +
+		'<div class="detail-actions"><button class="detail-action" id="btnPlayItem" tabindex="0"><i class="fas fa-play"></i> Reproducir</button>' +
+		'<button class="detail-action' + (isFav ? ' fav-active' : '') + '" id="btnFavItem" tabindex="0"><i class="fas fa-heart"></i> <span>' + (isFav ? 'En favoritos' : 'Favorito') + '</span></button></div>' +
+		(item.plot || item.description ? '<p class="detail-description">' + esc(item.plot || item.description) + '</p>' : '') +
+		'<div id="episodesHolder"></div></div></div></div>';
+	$('detailBack').addEventListener('click', () => { state.currentItem = null; renderCurrentPage(); });
+	$('btnPlayItem').addEventListener('click', () => {
+		if (type === 'movies') playStream({ stream_id: item.id, type: 'movie', title: item.name });
+		else openSeriesEpisodes(id);
+	});
+	$('btnFavItem').addEventListener('click', () => toggleFav(id, type).then(() => openDetail(id, type)));
+	if (type === 'series') openSeriesEpisodes(id);
+}
+function starsHtml(n) {
+	let h = '';
+	for (let i = 1; i <= 5; i++) h += '<span class="detail-star' + (i <= Math.round(n) ? ' filled' : '') + '">★</span>';
+	return h;
+}
+async function openSeriesEpisodes(seriesId) {
+	const holder = $('episodesHolder');
+	if (!holder) return;
+	holder.innerHTML = '<div class="loading-container"><div class="loading-spinner"></div><p>Cargando episodios...</p></div>';
+	try {
+		const data = await api('/api/series/' + encodeURIComponent(seriesId) + '/episodes?server_id=' + encodeURIComponent(state.serverId || ''));
+		state.currentEpisodes = data.episodes || [];
+		if (!state.currentEpisodes.length) { holder.innerHTML = '<div class="empty-state"><p>Sin episodios disponibles.</p></div>'; return; }
+		holder.innerHTML = '<div class="episodes-section"><div class="episodes-header"><div class="episodes-title"><i class="fas fa-list-ol"></i> ' + state.currentEpisodes.length + ' episodios</div></div>' +
+			'<div class="episodes-list">' + state.currentEpisodes.map((e, i) =>
+				'<div class="episode-card" data-ep="' + i + '" tabindex="0">' +
+				(e.poster || e.cover ? '<img loading="lazy" src="' + esc(e.poster || e.cover) + '" onerror="this.style.display=\'none\'">' : '') +
+				'<div class="episode-card-overlay"><i class="fas fa-play-circle"></i></div>' +
+				'<div class="episode-card-title">' + esc(e.name || ('Episodio ' + (i + 1))) + '</div></div>').join('') + '</div></div>';
+		holder.querySelectorAll('.episode-card').forEach(c => c.addEventListener('click', () => playEpisode(Number(c.dataset.ep))));
+	} catch (e) { holder.innerHTML = '<div class="empty-state"><p>' + esc(e.message) + '</p></div>'; }
+}
+function playEpisode(index) {
+	const ep = state.currentEpisodes[index];
+	if (!ep) return;
+	state.currentEpIndex = index;
+	playStream({ stream_id: ep.id, type: 'episode', title: (state.currentItem ? state.currentItem.name + ' · ' : '') + (ep.name || ('Episodio ' + (index + 1))) });
+}
+function openLive(id) {
+	const item = state.live.find(i => i.id === id);
+	if (!item) return;
+	state.zappingList = filterList(state.live);
+	state.zappingIndex = state.zappingList.findIndex(i => i.id === id);
+	if (state.zappingIndex < 0) state.zappingIndex = 0;
+	playStream({ stream_id: id, type: 'live', title: item.name });
+}
+   function closePlayer() {
+	const p = $('playerPage');
+	p.classList.remove('active', 'controls-visible');
+	const v = $('videoPlayer');
+	try { v.pause(); } catch (e) {}
+	if (hls) { hls.destroy(); hls = null; }
+	v.removeAttribute('src');
+	state.playerReady = false;
+	clearTimeout(ctrlTimer);
+	clearInterval(state.nextEpTimer);
+	$('nextEpBanner').classList.remove('show');
+	$('playerLoading').classList.remove('show');
+	$('playerError').classList.remove('show');
+}
+function playerPlaylist() {
+	if (state.currentType === 'live') return state.zappingList;
+	if (state.currentType === 'episode') return state.currentEpisodes;
+	return [];
+}
+function playerIndex() {
+	if (state.currentType === 'live') return state.zappingIndex;
+	if (state.currentType === 'episode') return state.currentEpIndex;
+	return -1;
+}
+function syncPlayerNav() {
+	const list = playerPlaylist();
+	const i = playerIndex();
+	const prev = $('btnPrev'), next = $('btnNext');
+	const has = list.length > 1;
+	prev.style.visibility = has ? 'visible' : 'hidden';
+	next.style.visibility = has ? 'visible' : 'hidden';
+	if (state.currentType === 'live') {
+		const p = list[i - 1], n = list[i + 1];
+		$('btnPrevLabel').textContent = p ? p.name : '';
+		$('btnNextLabel').textContent = n ? n.name : '';
+		prev.style.visibility = p ? 'visible' : 'hidden';
+		next.style.visibility = n ? 'visible' : 'hidden';
+	} else {
+		$('btnPrevLabel').textContent = 'Anterior';
+		$('btnNextLabel').textContent = 'Siguiente';
+		prev.style.visibility = i > 0 ? 'visible' : 'hidden';
+		next.style.visibility = i >= 0 && i < list.length - 1 ? 'visible' : 'hidden';
+	}
+}
+function stepPlaylist(delta) {
+	const list = playerPlaylist();
+	if (list.length < 2) return;
+	const i = playerIndex() + delta;
+	if (i < 0 || i >= list.length) return;
+	if (state.currentType === 'live') {
+		state.zappingIndex = i;
+		playStream({ stream_id: list[i].id, type: 'live', title: list[i].name }, true);
+	} else if (state.currentType === 'episode') {
+		playEpisode(i);
+	}
+}
+function showControls() {
+	$('playerPage').classList.add('controls-visible');
+	clearTimeout(ctrlTimer);
+	ctrlTimer = setTimeout(() => { $('playerPage').classList.remove('controls-visible'); }, 3500);
+}
+async function playStream(target, isZapping) {
+	const v = $('videoPlayer');
+	state.playerReady = false;
+	$('playerPage').classList.add('active');
+	showControls();
+	if (!isZapping) {
+		$('playerTitleTop').textContent = target.title || 'Reproduciendo';
+		closePlayerKeepOpen();
+	}
+	$('playerLoading').classList.add('show');
+	$('playerError').classList.remove('show');
+	$('nextEpBanner').classList.remove('show');
+	clearInterval(state.nextEpTimer);
+	try {
+		const data = await api('/api/stream', {
+			method: 'POST',
+			body: { server_id: state.serverId, stream_id: target.stream_id, type: target.type, title: target.title || '' }
+		});
+		const url = data.url;
+		$('playerLoading').classList.remove('show');
+		state.playerReady = true;
+		if (hls) { hls.destroy(); hls = null; }
+		if (url.indexOf('.m3u8') > -1 && window.Hls && window.Hls.isSupported()) {
+			hls = new window.Hls({ maxBufferLength: 20, maxMaxBufferLength: 40 });
+			hls.loadSource(url);
+			hls.attachMedia(v);
+			hls.on(window.Hls.Events.MANIFEST_PARSED, () => { v.play().catch(() => {}); });
+			hls.on(window.Hls.Events.ERROR, (ev, d) => {
+				if (d && d.fatal) {
+					if (d.type === 'networkError') { $('playerError').classList.add('show'); }
+					else if (d.type === 'mediaError') { hls.recoverMediaError(); }
+				}
+			});
+		} else {
+			v.src = url;
+			v.play().catch(() => {});
+		}
+		if (state.currentType === 'live') {
+			$('channelSwitchName').textContent = target.title || '';
+			$('channelSwitchInfo').textContent = state.serverName || '';
+			const b = $('channelSwitchBanner');
+			b.classList.add('show');
+			setTimeout(() => b.classList.remove('show'), 2200);
+		}
+		syncPlayerNav();
+	} catch (e) {
+		$('playerLoading').classList.remove('show');
+		$('playerError').classList.add('show');
+		notify(e.message, true);
+	}
+}
+function closePlayerKeepOpen() {
+	const v = $('videoPlayer');
+	try { v.pause(); } catch (e) {}
+	if (hls) { hls.destroy(); hls = null; }
+	v.removeAttribute('src');
+	$('playerProgressFill').style.width = '0%';
+	$('playerCurrentTime').textContent = '00:00:00';
+	state.playerReady = false;
+}
+async function saveResume(percent, seconds) {
+	if (!state.currentItem || state.currentType === 'live') return;
+	try {
+		await api('/api/resume', {
+			method: 'POST',
+			body: { server_id: state.serverId, item_type: state.currentType, item_ref: String(state.currentItem.id), percent: percent, seconds: seconds }
+		});
+		state.resumeMap[state.currentType + ':' + state.currentItem.id] = { percent: percent, seconds: seconds };
+	} catch (e) {}
+}
+function scheduleNextEpisode() {
+	if (state.currentType !== 'episode' || !state.epAutoplay) return;
+	if (state.currentEpIndex < 0 || state.currentEpIndex >= state.currentEpisodes.length - 1) return;
+	let left = 15;
+	$('nextEpCountdown').textContent = String(left);
+	$('nextEpBanner').classList.add('show');
+	clearInterval(state.nextEpTimer);
+	state.nextEpTimer = setInterval(() => {
+		left--;
+		$('nextEpCountdown').textContent = String(Math.max(0, left));
+		if (left <= 0) {
+			clearInterval(state.nextEpTimer);
+			$('nextEpBanner').classList.remove('show');
+			playEpisode(state.currentEpIndex + 1);
+		}
+	}, 1000);
+}
+function bindPlayer() {
+	const v = $('videoPlayer'), p = $('playerPage');
+	$('playerBack').addEventListener('click', closePlayer);
+	$('btnRetry').addEventListener('click', () => { if (state.currentItem || state.currentType === 'live' || state.currentEpIndex >= 0) closePlayer(); });
+	p.addEventListener('click', (ev) => {
+		if (ev.target.closest('.player-controls-overlay') || ev.target.closest('.player-top')) return;
+		if (p.classList.contains('controls-visible')) p.classList.remove('controls-visible');
+		else showControls();
+	});
+	$('btnPlay').addEventListener('click', () => { if (v.paused) v.play().catch(() => {}); else v.pause(); });
+	v.addEventListener('play', () => { $('btnPlay').innerHTML = '<i class="fas fa-pause"></i>'; });
+	v.addEventListener('pause', () => { $('btnPlay').innerHTML = '<i class="fas fa-play"></i>'; });
+	$('btnForward').addEventListener('click', () => { v.currentTime = Math.min(v.duration || 0, v.currentTime + 10); });
+	$('btnRewind').addEventListener('click', () => { v.currentTime = Math.max(0, v.currentTime - 10); });
+	$('btnPrev').addEventListener('click', () => stepPlaylist(-1));
+	$('btnNext').addEventListener('click', () => stepPlaylist(1));
+	$('btnNextEpNow').addEventListener('click', () => { clearInterval(state.nextEpTimer); $('nextEpBanner').classList.remove('show'); playEpisode(state.currentEpIndex + 1); });
+	$('volumeSlider').addEventListener('input', (e) => { v.volume = Number(e.target.value); v.muted = Number(e.target.value) === 0; $('btnMute').innerHTML = v.muted ? '<i class="fas fa-volume-mute"></i>' : '<i class="fas fa-volume-up"></i>'; });
+	$('btnMute').addEventListener('click', () => { v.muted = !v.muted; $('btnMute').innerHTML = v.muted ? '<i class="fas fa-volume-mute"></i>' : '<i class="fas fa-volume-up"></i>'; });
+	$('btnPiP').addEventListener('click', async () => {
+		try {
+			if (document.pictureInPictureElement) await document.exitPictureInPicture();
+			else await v.requestPictureInPicture();
+		} catch (e) { notify('PiP no disponible en este navegador.', true); }
+	});
+	$('playerProgress').addEventListener('click', (e) => {
+		const r = e.currentTarget.getBoundingClientRect();
+		const pct = (e.clientX - r.left) / r.width;
+		if (isFinite(v.duration) && v.duration > 0) v.currentTime = pct * v.duration;
+	});
+	v.addEventListener('timeupdate', () => {
+		if (!isFinite(v.duration) || v.duration <= 0) return;
+		const pct = (v.currentTime / v.duration) * 100;
+		$('playerProgressFill').style.width = pct + '%';
+		$('playerCurrentTime').textContent = fmtTime(v.currentTime);
+		$('playerDuration').textContent = fmtTime(v.duration);
+		if (Math.floor(v.currentTime) % 15 === 0 && state.currentItem) saveResume(pct, Math.floor(v.currentTime));
+	});
+	v.addEventListener('ended', () => {
+		if (state.currentType === 'episode') {
+			if (state.currentEpIndex < state.currentEpisodes.length - 1) scheduleNextEpisode();
+		} else if (state.currentType === 'live') {
+			stepPlaylist(1);
+		}
+	});
+	v.addEventListener('error', () => {
+		if (state.playerReady) $('playerError').classList.add('show');
+	});
+	document.addEventListener('keydown', (e) => {
+		if (!$('playerPage').classList.contains('active')) return;
+		if (e.key === 'ArrowRight') { v.currentTime += 10; showControls(); }
+		if (e.key === 'ArrowLeft') { v.currentTime = Math.max(0, v.currentTime - 10); showControls(); }
+		if (e.key === 'Escape') closePlayer();
+		if (e.key === ' ') { e.preventDefault(); if (v.paused) v.play().catch(() => {}); else v.pause(); }
+	});
+}
+function esc(s) {
+	return String(s === null || s === undefined ? '' : s)
+		.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function bindUI() {
+	$('loginForm').addEventListener('submit', (e) => { e.preventDefault(); doLogin($('activationCode').value); });
+	document.querySelectorAll('.nav-link, .mobile-nav-link[data-page]').forEach(b => b.addEventListener('click', () => switchPage(b.dataset.page)));
+	$('globalSearch').addEventListener('input', debounce((e) => { state.searchTerm = e.target.value.trim(); $('clearSearch').style.display = state.searchTerm ? 'block' : 'none'; renderCurrentPage(); }, 300));
+	$('clearSearch').addEventListener('click', () => { $('globalSearch').value = ''; state.searchTerm = ''; $('clearSearch').style.display = 'none'; renderCurrentPage(); });
+	$('userMenuTrigger').addEventListener('click', () => $('profileDropdown').classList.toggle('show'));
+	document.addEventListener('click', (e) => { if (!e.target.closest('.nav-user')) $('profileDropdown').classList.remove('show'); });
+	$('btnUpdateList').addEventListener('click', () => { $('profileDropdown').classList.remove('show'); refreshCatalog(); notify('Lista actualizada'); });
+	$('btnUpdateListModal').addEventListener('click', () => { $('settingsModal').classList.remove('show'); refreshCatalog(); notify('Lista actualizada'); });
+	$('btnLogout').addEventListener('click', () => logout());
+	$('btnLogoutModal').addEventListener('click', () => logout());
+	$('btnThemeSettings').addEventListener('click', () => { $('profileDropdown').classList.remove('show'); $('themeModal').classList.add('show'); });
+	$('btnThemeSettingsModal').addEventListener('click', () => { $('settingsModal').classList.remove('show'); $('themeModal').classList.add('show'); });
+	$('btnOurTeam').addEventListener('click', () => { $('profileDropdown').classList.remove('show'); $('teamModal').classList.add('show'); });
+	$('btnOurTeamModal').addEventListener('click', () => { $('settingsModal').classList.remove('show'); $('teamModal').classList.add('show'); });
+	$('btnLoadNew').addEventListener('click', () => { $('profileDropdown').classList.remove('show'); showLogin(); });
+	$('btnLoadNewModal').addEventListener('click', () => { $('settingsModal').classList.remove('show'); showLogin(); });
+	$('btnToggleFullscreen').addEventListener('click', () => { $('profileDropdown').classList.remove('show'); toggleFull(); });
+	$('btnToggleFullscreenModal').addEventListener('click', () => { $('settingsModal').classList.remove('show'); toggleFull(); });
+	$('mobileSettingsBtn').addEventListener('click', () => $('settingsModal').classList.add('show'));
+	$('closeTeamModal').addEventListener('click', () => $('teamModal').classList.remove('show'));
+	$('closeThemeModal').addEventListener('click', () => $('themeModal').classList.remove('show'));
+	$('closeSettingsModal').addEventListener('click', () => $('settingsModal').classList.remove('show'));
+	document.querySelectorAll('.theme-color').forEach(t => t.addEventListener('click', () => {
+		document.querySelectorAll('.theme-color').forEach(x => x.classList.remove('active'));
+		t.classList.add('active');
+		applyTheme(t.dataset.color, t.dataset.dark);
+	}));
+	document.addEventListener('click', (e) => {
+		const sel = e.target.closest('#sortSelect');
+		if (sel) { state.sortMode = sel.value; renderCurrentPage(); }
+	});
+}
+function toggleFull() {
+	if (!document.fullscreenElement) { (document.documentElement.requestFullscreen || function(){}).call(document.documentElement); }
+	else if (document.exitFullscreen) document.exitFullscreen();
+}
+function debounce(fn, ms) {
+	let t = null;
+	return function(arg) { clearTimeout(t); t = setTimeout(() => fn(arg), ms); };
+}
+async function loadFavorites() {
+	try { const d = await api('/api/favorites'); state.favorites = d.favorites || []; } catch (e) {}
+}
+async function loadResume() {
+	try {
+		const d = await api('/api/resume');
+		state.resumeMap = {};
+		(d.continue || []).forEach(r => { state.resumeMap[r.item_type + ':' + r.item_ref] = r; });
+	} catch (e) {}
+}
+async function init() {
+	bindUI();
+	bindPlayer();
+	setTimeout(() => { $('loadingScreen').style.display = 'none'; }, 500);
+	const ok = await restoreSession();
+	if (!ok) showLogin();
+	else { await loadFavorites(); await loadResume(); }
+}
+init();
+})();
+</script>
+</body>
+</html>
