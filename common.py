@@ -1,12 +1,23 @@
 import os, secrets, string, hashlib, hmac
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 import psycopg2
 import psycopg2.extras
 from cryptography.fernet import Fernet, InvalidToken
 
-# --- DATOS REALES ---
-DATABASE_URL = 'postgresql://postgres.hotekovqnkpwwvevulwrt:I5724180t.%40@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require'
+# --- DATOS DE CONEXIÓN ---
+# El usuario y la contraseña van aquí escritos para que no haya que pegar URLs largas.
+DB_HOST = 'aws-0-eu-central-1.pooler.supabase.com'
+DB_PORT = '5432'
+DB_USER = 'postgres.hotekovqnkpwwevulwrt'
+DB_PASS = 'I5724180t.@'
+DB_NAME = 'postgres'
+
+DATABASE_URL = (
+    f"postgresql://{DB_USER}:{quote(DB_PASS, safe='')}"
+    f"@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=require"
+)
 
 # Clave Fernet fija: NO cambiarla nunca o las credenciales guardadas dejan de abrirse.
 ENCRYPT_KEY = 'FFbj9Huz7DbWp16juLVrzzoeNB1Fx-pWKzMWBLURxHc='
